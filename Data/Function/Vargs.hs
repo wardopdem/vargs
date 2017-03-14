@@ -4,6 +4,7 @@ module Data.Function.Vargs where
 
 import Language.Haskell.TH
 import Language.Haskell.TH.Syntax
+import qualified Data.Map as M
 
 class ArgSrc a where
     toArg :: a -> Q (Type, Exp)
@@ -55,7 +56,13 @@ defVargsFun' fn srcFn sts = do
 
              [inst [] (AppT cnt_as cnt_at) [ValD (VarP toArg) (NormalB (VarE 'id)) []]] ++
 
-             [inst [] (AppT cnt_as t) [ValD (VarP toArg) (NormalB e) []] | (t, e) <- sts'] ++
+--             [inst [] (AppT cnt_as t) [ValD (VarP toArg) (NormalB e) []] | (t, e) <- sts'] ++
+
+             [let (ctx, t') = genzType t in
+              inst ctx (AppT cnt_as t') [ValD (VarP toArg) (NormalB e) []] | (t, e) <- sts'] ++
+
+
+
 
              [SigD nm $ ForallT [ptv_a] [AppT cnt_ap vrt_a] t',
               FunD nm [Clause (map VarP nms) (NormalB $ foldl1 AppE ([VarE prc] ++ map VarE nms ++ [ListE []])) []]] 
@@ -96,3 +103,21 @@ splitType nm = do
 
         where mkType = foldr1 AppT
               mbWithCtx t ctx = maybe t (\c -> ForallT [] c t) ctx
+
+genzType :: Type -> ([Type], Type)
+genzType t@(ConT nm) = ([], t)
+genzType tp =
+    let (t, m, tvs) = work tp (M.empty :: M.Map Name String) tpVars 
+    in (map mkCtx (M.assocs m), t)   
+        where work (ConT nm) m tvs =
+                case M.lookup nm m of
+                    Just s -> (VarT $ mkName s, m, tvs)
+                    Nothing -> let (s : tvs') = tvs 
+                               in (VarT $ mkName s, M.insert nm s m, tvs')
+              work (AppT t1 t2) m tvs = 
+                let (t', m', tvs') = work t1 m tvs
+                in  let (t'', m'', tvs'') = work t2 m' tvs'
+                    in (AppT t' t'', m'', tvs'')
+              work t m tvs = (t, m, tvs)
+              mkCtx (nm, s) = AppT (AppT EqualityT (VarT $ mkName s)) (ConT nm)
+              tpVars = map (:[]) ['a'..'z']  
