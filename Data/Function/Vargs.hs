@@ -73,13 +73,7 @@ defVargsFun' fn srcFn sts = do
 
              [inst [] (AppT cnt_as cnt_at) [ValD (VarP toArg) (NormalB (VarE 'id)) []]] ++
 
-
              [ist cnt_as [ValD (VarP toArg) (NormalB e) []] | insts <- sts', (ist, e) <- insts] ++
-
---             [ist cnt_as [ValD (VarP toArg) (NormalB e) []] | (ist, e) <- sts'] ++
---             [inst [] (AppT cnt_as t) [ValD (VarP toArg) (NormalB e) []] | (t, e) <- sts'] ++
-             -- [let (ctx, t') = genzType t 
-             --  in inst ctx (AppT cnt_as t') [ValD (VarP toArg) (NormalB e) []] | (t, e) <- sts'] ++
 
              [SigD nm $ ForallT [ptv_a] [AppT cnt_ap vrt_a] t',
               FunD nm [Clause (map VarP nms) (NormalB $ foldl1 AppE ([VarE prc] ++ map VarE nms ++ [ListE []])) []]] 
