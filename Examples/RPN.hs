@@ -21,5 +21,5 @@ defVargsFun "workBPN" 'workBPN'
 
 main = do
     print $ workBPN' [Op (*), Num 7, Op (*), Num 5, Num 5]
-    print $ workBPN (*) 7 (*) [1::Double,2,3] "5"
+    print $ workBPN (*) 7 (*) [1::Double, 2, 3] "5"
 

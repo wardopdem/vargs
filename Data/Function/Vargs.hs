@@ -6,16 +6,21 @@ import Language.Haskell.TH
 import Language.Haskell.TH.Syntax
 import qualified Data.Map as M
 
-type TypeHandler = Q (Type -> [Dec] -> Dec, Exp)
+type TypeHandler = Q [(Type -> [Dec] -> Dec, Exp)]
 
 class ArgSrc a where
     toArg :: a -> TypeHandler
 
 instance ArgSrc (Name, ExpQ) where
-    toArg (n, e) = do e' <- e; mkTpHndl (ConT n) e'
+    toArg (n, e) = do e' <- e; return [mkTpHndl (ConT n) e']
+
+instance ArgSrc ([Name], ExpQ) where
+    toArg (ns, e) = do 
+        e' <- e
+        return [mkTpHndl (ConT n) e' | n <- ns]
 
 instance ArgSrc (TypeQ, ExpQ) where
-    toArg (t, e) = do t' <- t; e' <- e; mkTpHndl t' e'
+    toArg (t, e) = do t' <- t; e' <- e; return [mkTpHndl t' e']
 
 newtype Genz = Genz TypeQ
 
@@ -24,9 +29,9 @@ instance ArgSrc (Genz, ExpQ) where
         t <- tq 
         e' <- e
         let (ctx, t') = genzType t 
-        return (\t'' -> InstanceD Nothing ctx (AppT t'' t'), e')
+        return [(\t'' -> InstanceD Nothing ctx (AppT t'' t'), e')]
 
-mkTpHndl t e = return (\t' -> InstanceD Nothing [] (AppT t' t), e)
+mkTpHndl t e = (\t' -> InstanceD Nothing [] (AppT t' t), e)
 
 class ArgProc a where
     prc :: String -> Name -> [TypeHandler] -> a
@@ -68,7 +73,10 @@ defVargsFun' fn srcFn sts = do
 
              [inst [] (AppT cnt_as cnt_at) [ValD (VarP toArg) (NormalB (VarE 'id)) []]] ++
 
-             [ist cnt_as [ValD (VarP toArg) (NormalB e) []] | (ist, e) <- sts'] ++
+
+             [ist cnt_as [ValD (VarP toArg) (NormalB e) []] | insts <- sts', (ist, e) <- insts] ++
+
+--             [ist cnt_as [ValD (VarP toArg) (NormalB e) []] | (ist, e) <- sts'] ++
 --             [inst [] (AppT cnt_as t) [ValD (VarP toArg) (NormalB e) []] | (t, e) <- sts'] ++
              -- [let (ctx, t') = genzType t 
              --  in inst ctx (AppT cnt_as t') [ValD (VarP toArg) (NormalB e) []] | (t, e) <- sts'] ++
