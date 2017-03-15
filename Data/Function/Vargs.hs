@@ -6,17 +6,30 @@ import Language.Haskell.TH
 import Language.Haskell.TH.Syntax
 import qualified Data.Map as M
 
+type TypeHandler = Q (Type -> [Dec] -> Dec, Exp)
+
 class ArgSrc a where
-    toArg :: a -> Q (Type, Exp)
+    toArg :: a -> TypeHandler
 
 instance ArgSrc (Name, ExpQ) where
-    toArg (n, e) = do e' <- e; return (ConT n, e')
+    toArg (n, e) = do e' <- e; mkTpHndl (ConT n) e'
 
 instance ArgSrc (TypeQ, ExpQ) where
-    toArg (t, e) = do t' <- t; e' <- e; return (t', e')  
+    toArg (t, e) = do t' <- t; e' <- e; mkTpHndl t' e'
+
+newtype Genz = Genz TypeQ
+
+instance ArgSrc (Genz, ExpQ) where
+    toArg (Genz tq, e) = do 
+        t <- tq 
+        e' <- e
+        let (ctx, t') = genzType t 
+        return (\t'' -> InstanceD Nothing ctx (AppT t'' t'), e')
+
+mkTpHndl t e = return (\t' -> InstanceD Nothing [] (AppT t' t), e)
 
 class ArgProc a where
-    prc :: String -> Name -> [Q (Type, Exp)] -> a
+    prc :: String -> Name -> [TypeHandler] -> a
 
 instance ArgProc DecsQ where
     prc = defVargsFun'
@@ -24,7 +37,7 @@ instance ArgProc DecsQ where
 instance (ArgSrc a, ArgProc r) => ArgProc (a -> r) where
     prc fn e sts = prc fn e . (: sts) . toArg
 
-defVargsFun' :: String -> Name -> [Q (Type, Exp)] -> DecsQ
+defVargsFun' :: String -> Name -> [TypeHandler] -> DecsQ
 defVargsFun' fn srcFn sts = do
     argPrc <- nn "ArgPrc"
     argSrc <- nn "ArgSrc"
@@ -53,16 +66,12 @@ defVargsFun' fn srcFn sts = do
                     [FunD prc [Clause (map VarP nms ++ [VarP acc])
                         (NormalB $ conv [foldl AppE (VarE prc) (map VarE nms), conv [consTo acc, VarE toArg]]) []]]] ++
 
-
              [inst [] (AppT cnt_as cnt_at) [ValD (VarP toArg) (NormalB (VarE 'id)) []]] ++
 
+             [ist cnt_as [ValD (VarP toArg) (NormalB e) []] | (ist, e) <- sts'] ++
 --             [inst [] (AppT cnt_as t) [ValD (VarP toArg) (NormalB e) []] | (t, e) <- sts'] ++
-
-             [let (ctx, t') = genzType t in
-              inst ctx (AppT cnt_as t') [ValD (VarP toArg) (NormalB e) []] | (t, e) <- sts'] ++
-
-
-
+             -- [let (ctx, t') = genzType t 
+             --  in inst ctx (AppT cnt_as t') [ValD (VarP toArg) (NormalB e) []] | (t, e) <- sts'] ++
 
              [SigD nm $ ForallT [ptv_a] [AppT cnt_ap vrt_a] t',
               FunD nm [Clause (map VarP nms) (NormalB $ foldl1 AppE ([VarE prc] ++ map VarE nms ++ [ListE []])) []]] 
