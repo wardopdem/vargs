@@ -138,17 +138,7 @@ splitType
           Type, [Name]
          )
 splitType nm = do
---    VarI _ tp _ <- reify nm
-
-    r <- reify nm
-
-    let tp' = case r of  
-                VarI _ tp _ -> Just tp
-                _ -> Nothing
-    
-    when (isNothing tp' ) $ fail $ "\"" ++ nameBase nm ++ "\" is not a function!"
-    let tp = fromJust tp'
-
+    VarI _ tp _ <- reify nm
     let (rt, ctx) = case tp of
                 ForallT _ c t' -> (t', Just c)
                 t' -> (t', Nothing)
