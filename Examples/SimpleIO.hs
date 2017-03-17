@@ -6,7 +6,9 @@ tester' q (x : y : z) =  putStrLn $ "Fixed parameter " ++ q ++ ", next x = " ++ 
 
 $( return [] )
 
-defVargsFun "tester" 'tester'
+data Foo = Foo
+
+defVargsFun "tester" 'tester' 
         (''Integer,     [| ("Int " ++) . show |])
         (''(),          [| const "NULL" |])
         ([t| [Int] |],  [| ("[Int] " ++) . show |])

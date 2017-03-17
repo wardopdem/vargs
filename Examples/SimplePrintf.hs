@@ -30,7 +30,7 @@ sprintf' fmt vs =
 
 $( return [] )
 
-defVargsFun "sprintf" 'sprintf' ([''Integer, ''Double, ''String], [| Val |])
+defVargsFun "sprintf" 'sprintf' [''Integer, ''Double, ''String]
 
 main = do
     return()

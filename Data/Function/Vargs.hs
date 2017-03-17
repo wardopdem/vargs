@@ -5,22 +5,54 @@ module Data.Function.Vargs where
 import Language.Haskell.TH
 import Language.Haskell.TH.Syntax
 import qualified Data.Map as M
+import Control.Monad(when)
+import Data.Maybe
 
-type TypeHandler = Q [(Type -> [Dec] -> Dec, Exp)]
+{------ ArgSrc ----}
+
+type InstMaker = Type -> Type -> Name -> DecsQ
+type InstMakerQ = Q InstMaker
 
 class ArgSrc a where
-    toArg :: a -> TypeHandler
+    toArg :: a -> InstMakerQ
+
+mkTpHndl :: Cxt -> Type -> Exp -> InstMakerQ
+mkTpHndl c t e = return $ \cnt_as cnt_at mt -> do
+    return [InstanceD Nothing c (AppT cnt_as t) [ValD (VarP mt) (NormalB e) []]]
 
 instance ArgSrc (Name, ExpQ) where
-    toArg (n, e) = do e' <- e; return [mkTpHndl (ConT n) e']
+    toArg (n, e) = do 
+        e' <- e 
+        mkTpHndl [] (ConT n) e'
 
+instance ArgSrc (TypeQ, ExpQ) where
+    toArg (t, e) = do 
+        t' <- t 
+        e' <- e 
+        mkTpHndl [] t' e'
+
+concIms :: [InstMaker] -> InstMakerQ
+concIms ims =  
+    return $ \cnt_as cnt_at mt -> do
+        decs <- sequenceQ $ map (\i -> i cnt_as cnt_at mt) ims 
+        return $ concat decs
+               
 instance ArgSrc ([Name], ExpQ) where
     toArg (ns, e) = do 
         e' <- e
-        return [mkTpHndl (ConT n) e' | n <- ns]
+        ims <- sequenceQ [mkTpHndl [] (ConT n) e' | n <- ns]
+        concIms ims
 
-instance ArgSrc (TypeQ, ExpQ) where
-    toArg (t, e) = do t' <- t; e' <- e; return [mkTpHndl t' e']
+instance ArgSrc [Name] where
+    toArg ns = do
+        ims <- sequenceQ [mkTpHndl' (ConT n) | n <- ns]
+        concIms ims
+            where mkTpHndl' t = return $ \cnt_as cnt_at mt -> do
+                    wc  <- wrapCons cnt_at  
+                    return [InstanceD Nothing [] (AppT cnt_as t) [ValD (VarP mt) (NormalB wc) []]]
+                  wrapCons (ConT cn) = do
+                    TyConI (DataD _ _ _ _ [ForallC _ _ (NormalC cn' _)] _) <- reify cn
+                    conE cn'
 
 newtype Genz = Genz TypeQ
 
@@ -29,12 +61,12 @@ instance ArgSrc (Genz, ExpQ) where
         t <- tq 
         e' <- e
         let (ctx, t') = genzType t 
-        return [(\t'' -> InstanceD Nothing ctx (AppT t'' t'), e')]
+        mkTpHndl ctx t' e'
 
-mkTpHndl t e = (\t' -> InstanceD Nothing [] (AppT t' t), e)
+{------ ArgProc ----}
 
 class ArgProc a where
-    prc :: String -> Name -> [TypeHandler] -> a
+    prc :: String -> Name -> [InstMakerQ] -> a
 
 instance ArgProc DecsQ where
     prc = defVargsFun'
@@ -42,22 +74,25 @@ instance ArgProc DecsQ where
 instance (ArgSrc a, ArgProc r) => ArgProc (a -> r) where
     prc fn e sts = prc fn e . (: sts) . toArg
 
-defVargsFun' :: String -> Name -> [TypeHandler] -> DecsQ
+{------- defVargsFun -------}
+
+defVargsFun' :: String -> Name -> [InstMakerQ] -> DecsQ
 defVargsFun' fn srcFn sts = do
     argPrc <- nn "ArgPrc"
     argSrc <- nn "ArgSrc"
     prc    <- nn "prc"
     acc    <- nn "acc"
     toArg  <- nn "toArg"
-    sts'   <- sequenceQ sts
     (t, t', rt, cnt_at, nms) <- splitType srcFn
-    let ptv_a  = PlainTV $ mkName "a"
-        cnt_a  = ConT nm_a
+
+    let cnt_a  = ConT nm_a
         vrt_a  = VarT nm_a
         vrt_r  = VarT nm_r
         cnt_ap = ConT argPrc
         cnt_as = ConT argSrc
-        nm     = mkName fn
+
+    sts'  <- sequenceQ sts 
+    insts <- sequenceQ $ map (\i -> i cnt_as cnt_at toArg) sts' 
 
     return $ [cls argPrc [ptv_a] [] [SigD prc t ]] ++
 
@@ -73,7 +108,7 @@ defVargsFun' fn srcFn sts = do
 
              [inst [] (AppT cnt_as cnt_at) [ValD (VarP toArg) (NormalB (VarE 'id)) []]] ++
 
-             [ist cnt_as [ValD (VarP toArg) (NormalB e) []] | insts <- sts', (ist, e) <- insts] ++
+             concat insts ++
 
              [SigD nm $ ForallT [ptv_a] [AppT cnt_ap vrt_a] t',
               FunD nm [Clause (map VarP nms) (NormalB $ foldl1 AppE ([VarE prc] ++ map VarE nms ++ [ListE []])) []]] 
@@ -83,7 +118,9 @@ defVargsFun' fn srcFn sts = do
               cls     = ClassD []  
               inst    = InstanceD Nothing 
               consTo  = InfixE Nothing (ConE '(:)) . Just . VarE 
+              nm      = mkName fn
               nm_a    = mkName "a"
+              ptv_a   = PlainTV nm_a
               nm_r    = mkName "r"
 
 defVargsFun :: ArgProc a => String -> Name -> a
@@ -101,7 +138,17 @@ splitType
           Type, [Name]
          )
 splitType nm = do
-    VarI _ tp _ <- reify nm
+--    VarI _ tp _ <- reify nm
+
+    r <- reify nm
+
+    let tp' = case r of  
+                VarI _ tp _ -> Just tp
+                _ -> Nothing
+    
+    when (isNothing tp' ) $ fail $ "\"" ++ nameBase nm ++ "\" is not a function!"
+    let tp = fromJust tp'
+
     let (rt, ctx) = case tp of
                 ForallT _ c t' -> (t', Just c)
                 t' -> (t', Nothing)
