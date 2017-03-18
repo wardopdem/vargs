@@ -5,7 +5,6 @@ module Data.Function.Vargs where
 import Language.Haskell.TH
 import Language.Haskell.TH.Syntax
 import qualified Data.Map as M
-import Control.Monad(when)
 import Data.Maybe
 
 {------ ArgSrc ----}

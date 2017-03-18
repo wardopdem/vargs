@@ -4,8 +4,8 @@ import Data.Function.Vargs
 
 data Expr = Num Double | Op (Double -> Double -> Double)
 
-workBPN' :: [Expr] -> Double
-workBPN' = head . foldr rpnStep []
+calcRPN' :: [Expr] -> Double
+calcRPN' = head . foldr rpnStep [] . reverse
 
 rpnStep :: Expr -> [Double] -> [Double]
 rpnStep (Num n) stack = n : stack
@@ -13,13 +13,13 @@ rpnStep (Op f) (x:y:stack) = (f x y) : stack
 
 $( return [] )
 
-defVargsFun "workBPN" 'workBPN' 
+defVargsFun "calcRPN" 'calcRPN' 
     (''Integer, [| Num . fromIntegral |])
     (''String,  [| Num . fst . head . (reads :: ReadS Double) |])
     (Genz [t| Double -> Double -> Double |], [| Op |])
     ([t| [Double] |], [| Num . sum |])
 
 main = do
-    print $ workBPN' [Op (*), Num 7, Op (*), Num 5, Num 5]
-    print $ workBPN (*) 7 (*) [1::Double, 2, 3] "5"
-
+    print $ calcRPN' [Num 5, Num 5, Op (*)]
+    print $ calcRPN [1::Double,2,3] "5" (*) 7 (*) -- [1::Double,2,3]
+    print $ calcRPN 5 8 (*) 2 (+)
