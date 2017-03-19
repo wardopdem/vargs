@@ -2,37 +2,42 @@
 
 import Data.Function.Vargs
 
+type FmtRes = (String, String)
+
 class PfVal a where
-    doFmt :: String -> a -> (String, String)
+    doFmt :: FmtRes -> a -> FmtRes
 
 instance PfVal Integer where
-    doFmt fmt x = 
+    doFmt (fmt, res) x = 
         let (b, s) = span (/= '%') fmt
-        in  (b ++ show x, tail . tail $ s)
+        in  (res ++ (tail . tail $ s), b ++ show x)
 
 instance PfVal Double where
-    doFmt fmt x = 
+    doFmt (fmt, res) x = 
         let (b, s) = span (/= '%') fmt
-        in  (b ++ show x, tail . tail $ s)
+        in  (res ++ (tail . tail $ s), b ++ show x)
 
 instance PfVal String where
-    doFmt fmt x = 
+    doFmt (fmt, res) x = 
         let (b, s) = span (/= '%') fmt
-        in  (b ++ x, tail . tail $ s)
+        in  (res ++ (tail . tail $ s), b ++ x)
 
 data PfValWrap = forall a. PfVal a => Val a
 
-sprintf' :: String -> [PfValWrap] -> String
-sprintf' fmt vs = 
-    uncurry (flip (++)) $ foldl step (fmt, "") vs
-        where step :: (String, String) -> PfValWrap -> (String, String)
-              step (fmt, r) (Val f) = let (r', fmt') = doFmt fmt f in (fmt', r ++ r')
+printf_IO :: String -> [PfValWrap] -> String
+printf_IO fmt vs = 
+    uncurry (flip (++)) $ foldl step (fmt, "") vs where step fmt (Val f) = doFmt fmt f
+
+printf_String :: String -> [PfValWrap] -> IO ()
+printf_String fmt = putStrLn . printf_IO fmt
 
 $( return [] )
 
-defVargsFun "sprintf" 'sprintf' [''Integer, ''Double, ''String]
+defVargsFun "printf" ['printf_IO, 'printf_String] [''Integer, ''Double, ''String]
 
+main :: IO ()
 main = do
-    return()
-    putStrLn $ sprintf' "Number one is %d, number two is %f and string is \"%s\"" [Val 100, Val 123.456, Val "ok"]
-    putStrLn $ sprintf "Number one is %d, number two is %f and string is \"%s\"" 100 123.456 "ok"
+    let fmt = "Number one is %d, number two is %f and string is \"%s\""
+    putStrLn $ printf_IO fmt [Val 100, Val 123.456, Val "ok"]
+    putStrLn $ printf fmt 100 123.456 "ok"
+    printf fmt 100 123.456 "ok"
