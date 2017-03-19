@@ -24,20 +24,23 @@ instance PfVal String where
 
 data PfValWrap = forall a. PfVal a => Val a
 
-printf_IO :: String -> [PfValWrap] -> String
-printf_IO fmt vs = 
-    uncurry (flip (++)) $ foldl step (fmt, "") vs where step fmt (Val f) = doFmt fmt f
+printf_String :: String -> [PfValWrap] -> String
+printf_String fmt vs = 
+    uncurry (flip (++)) $ foldl step (fmt, "") vs 
+        where step fmt (Val f) = doFmt fmt f
 
-printf_String :: String -> [PfValWrap] -> IO ()
-printf_String fmt = putStrLn . printf_IO fmt
+printf_IO :: String -> [PfValWrap] -> IO ()
+printf_IO fmt = putStrLn . printf_String fmt
 
 $( return [] )
 
-defVargsFun "printf" ['printf_IO, 'printf_String] [''Integer, ''Double, ''String]
+defVargsFun "printf" 
+        ['printf_String, 'printf_IO] 
+        [''Integer, ''Double, ''String]
 
 main :: IO ()
 main = do
     let fmt = "Number one is %d, number two is %f and string is \"%s\""
-    putStrLn $ printf_IO fmt [Val 100, Val 123.456, Val "ok"]
+    printf_IO fmt [Val 100, Val 123.456, Val "ok"]
     putStrLn $ printf fmt 100 123.456 "ok"
     printf fmt 100 123.456 "ok"

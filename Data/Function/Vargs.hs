@@ -17,7 +17,7 @@ module Data.Function.Vargs (
     -- * Функция для реализации переменнго числа параметров.
     defVargsFun,
     -- * Классы и типы для реализации механизма переменного числа параметров
-    InstMaker, InstMakerQ, InstSrc(..),  ArgProc(..), Genz
+    InstMaker, InstMakerQ, InstSrc(..),  ArgProc(..), Genz(..)
 ) where 
 
 import Language.Haskell.TH
